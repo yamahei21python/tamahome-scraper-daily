@@ -27,12 +27,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt # requirements.txtに記述されたライブラリをインストール
 
-      - name: スクレイピングスクリプトを実行 (your_script.py)
+      - name: 物件スクレイピングスクリプトを実行 (your_script.py)
         run: python your_script.py # 最初のスクリプトを実行
 
-      - name: 比較分析スクリプトを実行 (compare_and_report.py)
+      - name: 物件比較分析スクリプトを実行 (compare_and_report.py)
         # 比較スクリプトは前のスクリプトで生成されたファイルに依存するため、続けて実行
         run: python compare_and_report.py
+
+      - name: 営業所スクレイピングスクリプトを実行 (scrape_offices.py) # 新しいステップ
+        run: python scrape_offices.py # 新しいスクリプトを実行
 
       - name: 生成されたCSVファイルとレポートをアーティファクトとして保存
         uses: actions/upload-artifact@v4
