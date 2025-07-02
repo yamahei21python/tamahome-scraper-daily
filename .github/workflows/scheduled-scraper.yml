@@ -1,0 +1,38 @@
+name: Scheduled TamaHome Scraper
+
+on:
+  schedule:
+    # UTCで毎日午前0時30分に実行 (日本時間だと午前9時30分)
+    # GitHub ActionsのcronはUTCで評価されます。
+    # 実行頻度を調整したい場合はこの部分を変更してください。
+    - cron: '30 0 * * *'
+  # GitHubのActionsタブから手動でワークフローを実行したい場合
+  workflow_dispatch:
+
+jobs:
+  scrape-data:
+    runs-on: ubuntu-latest # Ubuntu環境で実行
+
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v4 # リポジトリのコードをワークフローの実行環境にクローン
+
+      - name: Python環境をセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9' # スクリプトでZoneInfoを使用しているためPython 3.9以上を推奨
+
+      - name: 依存関係をインストール
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt # requirements.txtに記述されたライブラリをインストール
+
+      - name: スクリプトを実行
+        run: python your_script.py # 修正したPythonスクリプトを実行
+
+      - name: 生成されたCSVファイルをアーティファクトとして保存
+        uses: actions/upload-artifact@v4
+        with:
+          name: tamahome-data-${{ github.run_id }}
+          path: ./TamaHome_CSV_Data/ # スクリプトで指定した保存パス
+          retention-days: 7 # アーティファクトの保存期間 (任意)
