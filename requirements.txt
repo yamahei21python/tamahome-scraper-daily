@@ -1,3 +1,7 @@
 requests
 pandas
 beautifulsoup4
+matplotlib
+seaborn
+Pillow
+japanize_matplotlib
