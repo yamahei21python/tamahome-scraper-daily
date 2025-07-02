@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  scrape-data:
+  scrape-and-compare-data: # ジョブ名をより分かりやすく変更
     runs-on: ubuntu-latest # Ubuntu環境で実行
 
     steps:
@@ -27,12 +27,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt # requirements.txtに記述されたライブラリをインストール
 
-      - name: スクリプトを実行
-        run: python your_script.py # 修正したPythonスクリプトを実行
+      - name: スクレイピングスクリプトを実行 (your_script.py)
+        run: python your_script.py # 最初のスクリプトを実行
 
-      - name: 生成されたCSVファイルをアーティファクトとして保存
+      - name: 比較分析スクリプトを実行 (compare_and_report.py)
+        # 比較スクリプトは前のスクリプトで生成されたファイルに依存するため、続けて実行
+        run: python compare_and_report.py
+
+      - name: 生成されたCSVファイルとレポートをアーティファクトとして保存
         uses: actions/upload-artifact@v4
         with:
-          name: tamahome-data-${{ github.run_id }}
-          path: ./TamaHome_CSV_Data/ # スクリプトで指定した保存パス
+          name: tamahome-data-and-reports-${{ github.run_id }} # アーティファクト名を変更
+          path: ./TamaHome_CSV_Data/ # スクレイピングと比較スクリプトの両方で指定した保存パス
           retention-days: 7 # アーティファクトの保存期間 (任意)
