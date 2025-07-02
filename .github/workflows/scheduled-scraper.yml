@@ -45,6 +45,6 @@ jobs:
       - name: 生成された全ファイル（CSV, TXT, PNG, PDF）をアーティファクトとして保存
         uses: actions/upload-artifact@v4
         with:
-          name: tamahome-data-and-reports-${{ github.run_id }} # アーティファクト名を変更
-          path: ./TamaHome_CSV_Data/ # 全てのファイルがこのパスに保存されることを想定
+          name: tamahome-data-and-reports # ここを固定名にする
+          path: ./TamaHome_CSV_Data/
           retention-days: 7
