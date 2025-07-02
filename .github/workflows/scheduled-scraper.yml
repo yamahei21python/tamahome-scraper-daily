@@ -3,43 +3,48 @@ name: Scheduled TamaHome Scraper
 on:
   schedule:
     # UTCで毎日午前0時30分に実行 (日本時間だと午前9時30分)
-    # GitHub ActionsのcronはUTCで評価されます。
-    # 実行頻度を調整したい場合はこの部分を変更してください。
     - cron: '30 0 * * *'
-  # GitHubのActionsタブから手動でワークフローを実行したい場合
   workflow_dispatch:
 
 jobs:
-  scrape-and-compare-data: # ジョブ名をより分かりやすく変更
-    runs-on: ubuntu-latest # Ubuntu環境で実行
+  scrape-and-compare-data:
+    runs-on: ubuntu-latest
 
     steps:
       - name: リポジトリをチェックアウト
-        uses: actions/checkout@v4 # リポジトリのコードをワークフローの実行環境にクローン
+        uses: actions/checkout@v4
+
+      - name: 前回のデータをダウンロード (比較用)
+        uses: actions/download-artifact@v4
+        with:
+          name: tamahome-data-and-reports # 前回のupload-artifactで指定したartifactの名前
+          path: ./TamaHome_CSV_Data/    # ダウンロード先のパス (スクリプトが期待するパス)
 
       - name: Python環境をセットアップ
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9' # スクリプトでZoneInfoを使用しているためPython 3.9以上を推奨
+          python-version: '3.9' # Python 3.9以上を推奨 (ZoneInfoなどのため)
 
       - name: 依存関係をインストール
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt # requirements.txtに記述されたライブラリをインストール
+          pip install -r requirements.txt
 
       - name: 物件スクレイピングスクリプトを実行 (your_script.py)
-        run: python your_script.py # 最初のスクリプトを実行
+        run: python your_script.py
 
       - name: 物件比較分析スクリプトを実行 (compare_and_report.py)
-        # 比較スクリプトは前のスクリプトで生成されたファイルに依存するため、続けて実行
         run: python compare_and_report.py
 
-      - name: 営業所スクレイピングスクリプトを実行 (scrape_offices.py) # 新しいステップ
-        run: python scrape_offices.py # 新しいスクリプトを実行
+      - name: 営業所スクレイピングスクリプトを実行 (scrape_offices.py)
+        run: python scrape_offices.py
 
-      - name: 生成されたCSVファイルとレポートをアーティファクトとして保存
+      - name: 分析グラフ生成スクリプトを実行 (analyze_and_graph.py) # 新しいステップを追加
+        run: python analyze_and_graph.py
+
+      - name: 生成された全ファイル（CSV, TXT, PNG, PDF）をアーティファクトとして保存
         uses: actions/upload-artifact@v4
         with:
           name: tamahome-data-and-reports-${{ github.run_id }} # アーティファクト名を変更
-          path: ./TamaHome_CSV_Data/ # スクレイピングと比較スクリプトの両方で指定した保存パス
-          retention-days: 7 # アーティファクトの保存期間 (任意)
+          path: ./TamaHome_CSV_Data/ # 全てのファイルがこのパスに保存されることを想定
+          retention-days: 7
