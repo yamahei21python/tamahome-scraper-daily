@@ -1,11 +1,12 @@
-pandas
-sqlalchemy
-psycopg2-binary # または使用しているDBドライバ
 requests
+pandas
 beautifulsoup4
+sqlalchemy
+psycopg2-binary  # または使用しているDBドライバ
+backports.zoneinfo; python_version < '3.9'
 numpy
 matplotlib
 seaborn
 Pillow
 japanize-matplotlib
-backports.zoneinfo; python_version < '3.9'
+ipython # Colab/Jupyter環境での表示用
