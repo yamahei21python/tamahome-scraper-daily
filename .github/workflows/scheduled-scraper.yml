@@ -86,11 +86,12 @@ jobs:
           echo "Executing command: $COMMAND"
           $COMMAND
 
-      - name: Upload PDF Report as Artifact
-        # 可視化タスクが実行された場合にのみアップロード
+      - name: Upload Report Artifacts
+        # ★★★★★★★★★★ ここからが修正箇所 ★★★★★★★★★★
         if: success() && (github.event.inputs.task == 'all' || github.event.inputs.task == 'visualize_only' || github.event_name == 'schedule')
         uses: actions/upload-artifact@v4
         with:
           name: daily-analysis-report
-          path: ./output/*.pdf
-          if-no-files-found: ignore # 可視化しないモードではファイルがなくてもエラーにしない
+          # 'output' ディレクトリ全体をアップロードする
+          path: ./output/
+          if-no-files-found: error
