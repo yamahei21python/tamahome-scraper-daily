@@ -1,7 +1,6 @@
 requests
 pandas
 beautifulsoup4
-matplotlib
-seaborn
-Pillow
-japanize_matplotlib
+sqlalchemy
+psycopg2-binary  # PostgreSQLの場合。MySQLなら mysql-connector-python
+backports.zoneinfo; python_version < '3.9'
