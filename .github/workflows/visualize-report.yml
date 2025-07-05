@@ -1,0 +1,56 @@
+# .github/workflows/visualize-report.yml
+
+name: Generate Daily Analysis Report
+
+on:
+  # データ取得ワークフロー(scheduled-scraper.yml)の成功後に実行
+  workflow_run:
+    workflows: ["scheduled-scraper.yml"] # ここはデータ取得ワークフローの名前に合わせる
+    types:
+      - completed
+  
+  # 手動でも実行可能
+  workflow_dispatch:
+
+jobs:
+  build-and-upload-pdf:
+    # データ取得ワークフローが成功した場合にのみ、このジョブを実行
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    runs-on: ubuntu-latest
+    
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Cache and Install dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-visualize-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-visualize-
+      - run: |
+          pip install -r requirements.txt
+          # フォント関連で必要になる可能性のあるライブラリ
+          sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx
+
+      - name: Generate PDF Report
+        # スクリプトを実行。PDFは 'output' ディレクトリに保存される
+        run: python visualize_report.py --output-dir ./output 
+      
+      - name: Upload PDF as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-analysis-report # アーティファクト名
+          path: ./output/*.pdf # 'output' ディレクトリ内の全PDFをアップロード
+          if-no-files-found: error # ファイルが見つからない場合はエラーにする
