@@ -58,7 +58,7 @@ jobs:
       - name: Run Python Script
         run: |
           # 実行するコマンドを構築
-          COMMAND="python main_scraper.py"
+          COMMAND="python scrape_tamahome.py"
           
           # 手動実行時のタスク選択を反映
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
