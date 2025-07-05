@@ -31,7 +31,6 @@ HEADERS = {
 
 st.set_page_config(page_title="タマホーム分析レポート", layout="wide")
 st.title("📊 タマホーム 日次分析レポートビューア")
-st.markdown(f"リポジトリ: [{REPO_OWNER}/{REPO_NAME}](https://github.com/{REPO_OWNER}/{REPO_NAME})")
 
 # --- 関数定義 ---
 @st.cache_data(ttl=86400)
