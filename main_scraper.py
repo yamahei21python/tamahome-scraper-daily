@@ -103,7 +103,6 @@ def get_database_url():
 # ==============================================================================
 class Scraper:
     # (このクラス内の関数は、これまでのスクリプトの関数とほぼ同じです)
-    # (変更がないため、コードは省略します。前の回答のコードをここに配置してください)
     @staticmethod
     def clean_completion_date(date_str: Any) -> str:
         if not isinstance(date_str, str): return '情報なし'
@@ -283,14 +282,14 @@ class Scraper:
         detailed_df = detailed_df_base[(detailed_df_base['都道府県'] != '不明') & (detailed_df_base['属性'] != '不明')].copy()
         summary_df = detailed_df.copy()
         summary_df['価格x販売戸数'] = summary_df['価格（平均）'] * summary_df['販売戸数']
-        prefecture_summary_df = summary_df.groupby(['都道府県', '属性']).agg(総戸数=('総戸数', 'sum'), 販売戸数=('販売戸数', 'sum'), 価格x販売戸数_合計=('価格x販売戸数', 'sum')).reset_index()
+        prefecture_summary_df = summary_df.groupby(['都道府県', '属性'], observed=False).agg(総戸数=('総戸数', 'sum'), 販売戸数=('販売戸数', 'sum'), 価格x販売戸数_合計=('価格x販売戸数', 'sum')).reset_index()
         prefecture_summary_df['価格（平均）'] = prefecture_summary_df.apply(lambda r: r['価格x販売戸数_合計']/r['販売戸数'] if r['販売戸数']>0 else 0, axis=1).astype(int)
         prefecture_summary_df['売れ残り率'] = prefecture_summary_df.apply(lambda r: f"{(r['販売戸数']/r['総戸数']*100):.1f}%" if r['総戸数']>0 else "0.0%", axis=1)
         prefecture_summary_df = prefecture_summary_df[['都道府県', '属性', '総戸数', '販売戸数', '売れ残り率', '価格（平均）']]
         monthly_df = detailed_df[detailed_df['完成時期'].str.isdigit()].copy()
         if not monthly_df.empty:
             monthly_df['価格x販売戸数'] = monthly_df['価格（平均）'] * monthly_df['販売戸数']
-            monthly_summary_df = monthly_df.groupby(['完成時期', '属性']).agg(総戸数=('総戸数', 'sum'), 販売戸数=('販売戸数', 'sum'), 価格x販売戸数_合計=('価格x販売戸数', 'sum')).reset_index()
+            monthly_summary_df = monthly_df.groupby(['完成時期', '属性'], observed=False).agg(総戸数=('総戸数', 'sum'), 販売戸数=('販売戸数', 'sum'), 価格x販売戸数_合計=('価格x販売戸数', 'sum')).reset_index()
             monthly_summary_df['価格（平均）'] = monthly_summary_df.apply(lambda r: r['価格x販売戸数_合計']/r['販売戸数'] if r['販売戸数']>0 else 0, axis=1).astype(int)
             monthly_summary_df['売れ残り率'] = monthly_summary_df.apply(lambda r: f"{(r['販売戸数']/r['総戸数']*100):.1f}%" if r['総戸数']>0 else "0.0%", axis=1)
             monthly_summary_df = monthly_summary_df[['完成時期', '属性', '総戸数', '販売戸数', '売れ残り率', '価格（平均）']]
@@ -303,18 +302,15 @@ class Scraper:
 # 5. 可視化モジュール
 # ==============================================================================
 class Visualizer:
-    # 修正点: _import_libsは不要になったので削除
-    
     @staticmethod
     def analyze_attribute_by_month(df: pd.DataFrame) -> plt.Figure:
-        # ... (元のコード)
         print(" - グラフ 1/4: 販売中物件の属性別戸数割合（グラデーション円グラフ）を作成中...")
         df_for_sale = df[(df['販売戸数'] > 0) & (df['完成時期'].str.isdigit())].copy()
         df_plot = df_for_sale[df_for_sale['属性'].isin(['将来', '新築', '中古'])].copy()
         if df_plot.empty: return None
         attr_order = ['将来', '新築', '中古']; df_plot['属性'] = pd.Categorical(df_plot['属性'], categories=attr_order, ordered=True)
-        monthly_attr_totals = df_plot.groupby(['属性', '完成時期'])['販売戸数'].sum().sort_index(ascending=[True, False]); color_map = {}
-        months_by_attr = df_plot.groupby('属性')['完成時期'].unique().apply(lambda x: sorted(x, reverse=True))
+        monthly_attr_totals = df_plot.groupby(['属性', '完成時期'], observed=False)['販売戸数'].sum().sort_index(ascending=[True, False]); color_map = {}
+        months_by_attr = df_plot.groupby('属性', observed=False)['完成時期'].unique().apply(lambda x: sorted(x, reverse=True))
         future_months = months_by_attr.get('将来', []); new_months = months_by_attr.get('新築', []); used_months = months_by_attr.get('中古', [])
         if len(future_months) > 0:
             future_cmap = plt.get_cmap('Reds_r', len(future_months) + 3)
@@ -327,7 +323,7 @@ class Visualizer:
             for i, month in enumerate(used_months): color_map[('中古', month)] = used_cmap(i)
         fig, ax = plt.subplots(figsize=(12, 10)); pie_values = monthly_attr_totals.values; pie_colors = [color_map.get(idx, 'grey') for idx in monthly_attr_totals.index]
         ax.pie(pie_values, colors=pie_colors, startangle=90, counterclock=False, wedgeprops={'edgecolor': None})
-        attribute_totals = df_plot.groupby('属性')['販売戸数'].sum().reindex(attr_order); total_sales = attribute_totals.sum(); start_angle = 90
+        attribute_totals = df_plot.groupby('属性', observed=False)['販売戸数'].sum().reindex(attr_order); total_sales = attribute_totals.sum(); start_angle = 90
         for attr, attr_total in attribute_totals.items():
             if pd.isna(attr_total) or attr_total == 0: continue
             slice_angle = (attr_total / total_sales) * 360; mid_angle_deg = start_angle - (slice_angle / 2); start_angle -= slice_angle
@@ -339,7 +335,6 @@ class Visualizer:
 
     @staticmethod
     def analyze_combined_prefecture_view_detailed(df_detailed: pd.DataFrame, df_summary: pd.DataFrame, df_offices: pd.DataFrame) -> plt.Figure:
-        # ... (元のコード)
         print(" - グラフ 2/4: 都道府県別の価格・供給状況・営業所数の詳細分析を作成中...")
         all_prefs = df_detailed['都道府県'].unique(); geo_order = [pref for pref in PREFECTURE_ORDER if pref in all_prefs]
         if not geo_order: return None
@@ -362,7 +357,6 @@ class Visualizer:
         
     @staticmethod
     def analyze_combined_5_and_6(df_detailed: pd.DataFrame, df_monthly: pd.DataFrame) -> plt.Figure:
-        # ... (元のコード)
         print(" - グラフ 3/4: 価格分布と供給戸数の連携グラフを作成中..."); df_for_plots = df_detailed[df_detailed['完成時期'].str.isdigit()].copy()
         if df_for_plots.empty or df_monthly.empty: return None
         df_plot_line = df_monthly.copy(); rate_by_month = df_plot_line.groupby('完成時期')['売れ残り率'].mean(); rate_by_month.index = rate_by_month.index.astype(str); all_months = sorted(list(set(df_for_plots['完成時期'].unique()) | set(rate_by_month.index))); rate_by_month = rate_by_month.reindex(all_months, fill_value=np.nan); fig, axes = plt.subplots(2, 1, figsize=(16, 14), sharex=True); fig.suptitle('3. 完成時期別の価格・供給戸数と売れ残り率の分析', fontsize=20, y=0.95)
@@ -375,7 +369,6 @@ class Visualizer:
 
     @staticmethod
     def analyze_bubble_chart(df_detailed: pd.DataFrame, df_summary: pd.DataFrame, df_offices: pd.DataFrame) -> tuple:
-        # ... (元のコード)
         print(" - グラフ 4/4: バブルチャート分析を作成中..."); sales = df_detailed.groupby('都道府県')['販売戸数'].sum(); prices = df_detailed.groupby('都道府県')['価格（平均）'].mean(); rates = df_summary.groupby('都道府県')['売れ残り率'].mean(); bubble_df = pd.concat([sales, prices, rates], axis=1).dropna(); bubble_df.columns = ['販売戸数', '価格（平均）', '売れ残り率']
         if df_offices is not None and not df_offices.empty: bubble_df = bubble_df.join(df_offices.set_index('都道府県')['営業所数']).fillna(0)
         else: bubble_df['営業所数'] = 0
@@ -394,7 +387,6 @@ class Visualizer:
 # 6. データベース操作 & タスク実行モジュール
 # ==============================================================================
 class TaskRunner:
-    # ... (このクラスの内容は前の回答と同じです)
     def __init__(self, db_url):
         self.db_url = db_url
         self.engine = create_engine(self.db_url)
@@ -455,22 +447,29 @@ class TaskRunner:
                 connection.commit()
 
     def run_visualization_tasks(self, output_dir):
+        # ★★★ 修正箇所: ディレクトリ作成をここに追加 ★★★
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Output directory '{output_dir}' is ready.")
+        
         with self.engine.connect() as connection:
             print("\n" + "="*80 + "\n--- Part 4: PDF Report Visualization ---")
             df_detailed, df_pref, df_monthly, df_offices, latest_date = self._load_data_for_visualization(connection)
             if df_detailed is None:
                 print("Could not load data for visualization. Aborting.")
                 return
+
             figures = []
             figures.append(Visualizer.analyze_attribute_by_month(df_detailed))
             figures.append(Visualizer.analyze_combined_prefecture_view_detailed(df_detailed, df_pref, df_offices))
             figures.append(Visualizer.analyze_combined_5_and_6(df_detailed, df_monthly))
             fig_bubble, bubble_text = Visualizer.analyze_bubble_chart(df_detailed, df_pref, df_offices)
             if fig_bubble: figures.append(fig_bubble)
+            
             figures = [fig for fig in figures if fig is not None]
             if not figures:
                 print("No graphs were generated.")
                 return
+
             self._save_figures_to_pdf(figures, output_dir, latest_date)
             if bubble_text:
                 print("\n--- Bubble Chart Analysis ---")
