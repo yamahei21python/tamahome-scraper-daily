@@ -1,6 +1,11 @@
-requests
 pandas
-beautifulsoup4
 sqlalchemy
-psycopg2-binary  # PostgreSQLの場合。MySQLなら mysql-connector-python
+psycopg2-binary # または使用しているDBドライバ
+requests
+beautifulsoup4
+numpy
+matplotlib
+seaborn
+Pillow
+japanize-matplotlib
 backports.zoneinfo; python_version < '3.9'
