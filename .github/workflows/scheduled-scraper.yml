@@ -4,7 +4,7 @@ name: TamaHome Daily Job
 
 on:
   schedule:
-    - cron: '0 22 * * *' # 毎日 UTC 22:00 (JST 7:00)
+    - cron: '0 21 * * *' # 毎日 UTC 21:00 (JST 6:00)
 
   workflow_dispatch:
     inputs:
