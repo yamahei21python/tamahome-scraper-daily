@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-【完全統合版】タマホーム物件情報 自動処理スクリプト
+【完全統合版 / エラー修正済】タマホーム物件情報 自動処理スクリプト
 
 データ取得、比較分析、PDFレポート生成を一つのスクリプトで実行します。
 コマンドライン引数により、実行するタスクを選択可能です。
-
-- データ取得: ウェブサイトからデータを取得し、DBに保存。
-- 比較分析: 前日データとの差分を分析し、結果をDBに保存。
-- PDFレポート生成: 最新データからグラフを生成し、PDFとして出力。
 """
 
 # ==============================================================================
@@ -18,7 +14,7 @@ import re
 import json
 import time
 import argparse
-from datetime import datetime, date
+from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from io import BytesIO
 
@@ -29,7 +25,19 @@ import numpy as np
 from bs4 import BeautifulSoup
 from sqlalchemy import create_engine, text
 
-# --- 環境依存ライブラリ (try-exceptで囲む) ---
+# --- グラフ描画ライブラリ (冒頭でインポートする) ---
+import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+from matplotlib.patches import Patch
+from PIL import Image as PILImage
+try:
+    import japanize_matplotlib
+except ImportError:
+    print("Warning: japanize_matplotlib not found. Japanese characters may not display correctly.")
+
+# --- 環境依存ライブラリ ---
 try:
     from zoneinfo import ZoneInfo
 except ImportError:
@@ -40,10 +48,6 @@ try:
     IS_COLAB = True
 except ImportError:
     IS_COLAB = False
-
-# --- グラフ描画ライブラリ (必要な時だけインポートする関数内で使用) ---
-# このスクリプトの冒頭では直接インポートしないことで、
-# --scrape-only のような描画不要のモードで実行する際に不要なライブラリ読み込みを避ける。
 
 # ==============================================================================
 # 2. 定数定義
@@ -75,7 +79,7 @@ COLUMN_MAP_TO_JP = {
 }
 
 # ==============================================================================
-# 3. ヘルパー関数 (display, DB URL取得など)
+# 3. ヘルパー関数
 # ==============================================================================
 def custom_display(df):
     if IS_COLAB:
@@ -99,9 +103,9 @@ def get_database_url():
 # ==============================================================================
 class Scraper:
     # (このクラス内の関数は、これまでのスクリプトの関数とほぼ同じです)
+    # (変更がないため、コードは省略します。前の回答のコードをここに配置してください)
     @staticmethod
     def clean_completion_date(date_str: Any) -> str:
-        # ... (元のコード)
         if not isinstance(date_str, str): return '情報なし'
         dates_found = re.findall(r'(\d{4})[年|月]\s*(\d{1,2})月', date_str)
         if dates_found:
@@ -117,7 +121,6 @@ class Scraper:
 
     @staticmethod
     def determine_property_attribute(completion_info: str, jst_now: datetime) -> str:
-        # ... (元のコード)
         if completion_info == "完成済": return "新築"
         if not completion_info.isdigit(): return "不明"
         try:
@@ -132,7 +135,6 @@ class Scraper:
     
     @staticmethod
     def clean_price(price_str: Any) -> str:
-        # ... (元のコード)
         if not isinstance(price_str, str): return '0'
         price_matches = re.findall(r'([\d,.]+)\s*万円', price_str)
         if not price_matches:
@@ -146,7 +148,6 @@ class Scraper:
 
     @staticmethod
     def calculate_average_price(price_range_str: str) -> int:
-        # ... (元のコード)
         if not isinstance(price_range_str, str): return 0
         numbers = [int(n.replace(',', '')) for n in re.findall(r'[\d,]+', price_range_str)]
         if not numbers: return 0
@@ -154,14 +155,12 @@ class Scraper:
         
     @staticmethod
     def extract_first_number(text: Any) -> int:
-        # ... (元のコード)
         if not isinstance(text, str): return 0
         match = re.search(r'(\d+)', text)
         return int(match.group(1)) if match else 0
 
     @staticmethod
     def scrape_all_properties_details() -> Optional[pd.DataFrame]:
-        # ... (元のコード)
         from urllib.parse import urljoin
         with requests.Session() as session:
             all_properties = []
@@ -234,7 +233,6 @@ class Scraper:
 
     @staticmethod
     def scrape_tamahome_offices() -> Optional[pd.DataFrame]:
-        # ... (元のコード)
         from urllib.parse import urljoin
         print("Scraping office information...")
         try:
@@ -269,7 +267,6 @@ class Scraper:
 
     @classmethod
     def create_and_process_dataframes(cls, raw_df: pd.DataFrame, jst_now: datetime) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        # ... (元のコード)
         print("\n--- Step 4: Creating and formatting detailed list and summaries ---")
         df = raw_df.copy()
         df['物件名'] = df['物件名'].str.replace('タマタウン', '').str.strip()
@@ -302,30 +299,15 @@ class Scraper:
         print("-> DataFrames generated successfully.")
         return detailed_df, prefecture_summary_df, monthly_summary_df
 
-
 # ==============================================================================
 # 5. 可視化モジュール
 # ==============================================================================
 class Visualizer:
+    # 修正点: _import_libsは不要になったので削除
+    
     @staticmethod
-    def _import_libs():
-        """描画に必要なライブラリを動的にインポート"""
-        global plt, sns, cm, mcolors, Patch, PILImage
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        import matplotlib.cm as cm
-        import matplotlib.colors as mcolors
-        from matplotlib.patches import Patch
-        from PIL import Image as PILImage
-        try:
-            import japanize_matplotlib
-        except ImportError:
-            print("Warning: japanize_matplotlib not found. Japanese characters may not display correctly.")
-
-    @classmethod
-    def analyze_attribute_by_month(cls, df: pd.DataFrame) -> plt.Figure:
-        # ... (元のコード、冒頭にライブラリインポートを追加)
-        cls._import_libs()
+    def analyze_attribute_by_month(df: pd.DataFrame) -> plt.Figure:
+        # ... (元のコード)
         print(" - グラフ 1/4: 販売中物件の属性別戸数割合（グラデーション円グラフ）を作成中...")
         df_for_sale = df[(df['販売戸数'] > 0) & (df['完成時期'].str.isdigit())].copy()
         df_plot = df_for_sale[df_for_sale['属性'].isin(['将来', '新築', '中古'])].copy()
@@ -354,11 +336,10 @@ class Visualizer:
             ax.text(x, y, label_text, ha='center', va='center', fontsize=12, weight="bold")
         ax.axis('equal'); plt.title('1. 販売中物件の属性別販売戸数割合（完成月グラデーション）', fontsize=16)
         return fig
-    
-    @classmethod
-    def analyze_combined_prefecture_view_detailed(cls, df_detailed: pd.DataFrame, df_summary: pd.DataFrame, df_offices: pd.DataFrame) -> plt.Figure:
-        # ... (元のコード、冒頭にライブラリインポートを追加)
-        cls._import_libs()
+
+    @staticmethod
+    def analyze_combined_prefecture_view_detailed(df_detailed: pd.DataFrame, df_summary: pd.DataFrame, df_offices: pd.DataFrame) -> plt.Figure:
+        # ... (元のコード)
         print(" - グラフ 2/4: 都道府県別の価格・供給状況・営業所数の詳細分析を作成中...")
         all_prefs = df_detailed['都道府県'].unique(); geo_order = [pref for pref in PREFECTURE_ORDER if pref in all_prefs]
         if not geo_order: return None
@@ -379,10 +360,9 @@ class Visualizer:
         if 'ax3_twin' in locals(): ax3_twin.grid(False)
         fig.tight_layout(rect=[0, 0.03, 1, 0.96]); return fig
         
-    @classmethod
-    def analyze_combined_5_and_6(cls, df_detailed: pd.DataFrame, df_monthly: pd.DataFrame) -> plt.Figure:
-        # ... (元のコード、冒頭にライブラリインポートを追加)
-        cls._import_libs()
+    @staticmethod
+    def analyze_combined_5_and_6(df_detailed: pd.DataFrame, df_monthly: pd.DataFrame) -> plt.Figure:
+        # ... (元のコード)
         print(" - グラフ 3/4: 価格分布と供給戸数の連携グラフを作成中..."); df_for_plots = df_detailed[df_detailed['完成時期'].str.isdigit()].copy()
         if df_for_plots.empty or df_monthly.empty: return None
         df_plot_line = df_monthly.copy(); rate_by_month = df_plot_line.groupby('完成時期')['売れ残り率'].mean(); rate_by_month.index = rate_by_month.index.astype(str); all_months = sorted(list(set(df_for_plots['完成時期'].unique()) | set(rate_by_month.index))); rate_by_month = rate_by_month.reindex(all_months, fill_value=np.nan); fig, axes = plt.subplots(2, 1, figsize=(16, 14), sharex=True); fig.suptitle('3. 完成時期別の価格・供給戸数と売れ残り率の分析', fontsize=20, y=0.95)
@@ -393,10 +373,9 @@ class Visualizer:
         if np.sum(mask) > 1: sns.regplot(x=x_num[mask], y=y_val[mask], ax=ax2_bottom, scatter=False, ci=None, color='orange', line_kws={'linestyle':'-', 'linewidth': 3, 'alpha': 0.4})
         ax2_bottom.set_ylim(bottom=0); ax2_bottom.set_ylabel('売れ残り率 (%)'); [ax.grid(True, linestyle='--', alpha=0.6) for ax in [ax1_top, ax1_bottom]]; [ax.grid(False) for ax in [ax2_top, ax2_bottom]]; fig.tight_layout(rect=[0, 0.03, 1, 0.93]); return fig
 
-    @classmethod
-    def analyze_bubble_chart(cls, df_detailed: pd.DataFrame, df_summary: pd.DataFrame, df_offices: pd.DataFrame) -> tuple:
-        # ... (元のコード、冒頭にライブラリインポートを追加)
-        cls._import_libs()
+    @staticmethod
+    def analyze_bubble_chart(df_detailed: pd.DataFrame, df_summary: pd.DataFrame, df_offices: pd.DataFrame) -> tuple:
+        # ... (元のコード)
         print(" - グラフ 4/4: バブルチャート分析を作成中..."); sales = df_detailed.groupby('都道府県')['販売戸数'].sum(); prices = df_detailed.groupby('都道府県')['価格（平均）'].mean(); rates = df_summary.groupby('都道府県')['売れ残り率'].mean(); bubble_df = pd.concat([sales, prices, rates], axis=1).dropna(); bubble_df.columns = ['販売戸数', '価格（平均）', '売れ残り率']
         if df_offices is not None and not df_offices.empty: bubble_df = bubble_df.join(df_offices.set_index('都道府県')['営業所数']).fillna(0)
         else: bubble_df['営業所数'] = 0
@@ -415,12 +394,12 @@ class Visualizer:
 # 6. データベース操作 & タスク実行モジュール
 # ==============================================================================
 class TaskRunner:
+    # ... (このクラスの内容は前の回答と同じです)
     def __init__(self, db_url):
         self.db_url = db_url
         self.engine = create_engine(self.db_url)
 
     def setup_database_tables(self):
-        """データベースに必要なテーブルをすべて作成または確認する"""
         with self.engine.connect() as connection:
             print("\n--- [Setup Mode] Checking and creating tables if they don't exist ---")
             connection.execute(text("""
@@ -435,9 +414,7 @@ class TaskRunner:
             print("-> Tables are ready.")
 
     def run_scraping_tasks(self, jst_now, force_update=False):
-        """データ取得とDB保存のタスクを実行する"""
         with self.engine.connect() as connection:
-            # Office data
             print("\n" + "="*80 + "\n--- Part 1: Office Information ---")
             office_count_in_db = connection.execute(text("SELECT COUNT(*) FROM tamahome_offices")).scalar()
             if force_update or jst_now.day == 1 or office_count_in_db == 0:
@@ -445,77 +422,61 @@ class TaskRunner:
                 if df_offices is not None and not df_offices.empty: self._save_offices_to_db(connection, df_offices, jst_now)
             else:
                 print("Skipping office data update.")
-            
-            # Property data
             print("\n" + "="*80 + "\n--- Part 2: Property Information ---")
             raw_property_df = Scraper.scrape_all_properties_details()
             if raw_property_df is None or raw_property_df.empty:
                 print("\nCould not retrieve property data. Terminating property scraping.")
                 return
-            
             detailed_df, pref_summary_df, month_summary_df = Scraper.create_and_process_dataframes(raw_property_df, jst_now)
-            
             print("\n--- Saving data to database ---")
             self._save_data_to_db(connection, detailed_df, 'tamahome_properties_detailed', jst_now, ['scrape_date', 'url'])
             self._save_data_to_db(connection, pref_summary_df, 'tamahome_summary_prefecture', jst_now, ['scrape_date', 'prefecture', 'attribute'])
             self._save_data_to_db(connection, month_summary_df, 'tamahome_summary_monthly', jst_now, ['scrape_date', 'completion_period', 'attribute'])
-            
             connection.commit()
 
     def run_analysis_tasks(self, jst_now):
-        """比較分析とレポートDB保存のタスクを実行する"""
         with self.engine.connect() as connection:
             print("\n" + "="*80 + "\n--- Part 3: Daily Comparison Analysis ---")
             today = jst_now.date()
             date_query = text("SELECT DISTINCT scrape_date FROM tamahome_properties_detailed ORDER BY scrape_date DESC LIMIT 2;")
             result = connection.execute(date_query).fetchall()
-
             if len(result) < 2 or result[0][0] != today:
                 print("-> Not enough data for comparison. Skipping report generation.")
                 return
-
             latest_date, previous_date = result[0][0], result[1][0]
             df_latest = pd.read_sql(text("SELECT * FROM tamahome_properties_detailed WHERE scrape_date = :date"), connection, params={'date': latest_date})
             df_previous = pd.read_sql(text("SELECT * FROM tamahome_properties_detailed WHERE scrape_date = :date"), connection, params={'date': previous_date})
-            
             reports_to_save = self._analyze_differences(df_latest, df_previous, today)
-            
             if reports_to_save:
                 connection.execute(text("DELETE FROM tamahome_daily_reports WHERE report_date = :today"), {'today': today})
-                stmt = text("""INSERT INTO tamahome_daily_reports (report_date, report_type, content) VALUES (:report_date, :report_type, :content::jsonb)""")
+                stmt = text("INSERT INTO tamahome_daily_reports (report_date, report_type, content) VALUES (:report_date, :report_type, :content::jsonb)")
                 db_result = connection.execute(stmt, reports_to_save)
                 print(f"-> Saved {db_result.rowcount} report entries to the database.")
                 connection.commit()
 
     def run_visualization_tasks(self, output_dir):
-        """グラフPDF生成のタスクを実行する"""
         with self.engine.connect() as connection:
             print("\n" + "="*80 + "\n--- Part 4: PDF Report Visualization ---")
             df_detailed, df_pref, df_monthly, df_offices, latest_date = self._load_data_for_visualization(connection)
             if df_detailed is None:
                 print("Could not load data for visualization. Aborting.")
                 return
-
             figures = []
             figures.append(Visualizer.analyze_attribute_by_month(df_detailed))
             figures.append(Visualizer.analyze_combined_prefecture_view_detailed(df_detailed, df_pref, df_offices))
             figures.append(Visualizer.analyze_combined_5_and_6(df_detailed, df_monthly))
             fig_bubble, bubble_text = Visualizer.analyze_bubble_chart(df_detailed, df_pref, df_offices)
             if fig_bubble: figures.append(fig_bubble)
-            
             figures = [fig for fig in figures if fig is not None]
             if not figures:
                 print("No graphs were generated.")
                 return
-
             self._save_figures_to_pdf(figures, output_dir, latest_date)
             if bubble_text:
                 print("\n--- Bubble Chart Analysis ---")
                 print(bubble_text)
 
-    # --- Private helper methods for database interaction ---
     def _save_data_to_db(self, connection, df, table_name, jst_now, unique_keys):
-        # ... (元のsave_data_to_dbのロジック)
         if df.empty: return
         df_to_save = df.copy()
         df_to_save['scrape_date'] = jst_now.date()
@@ -531,7 +492,6 @@ class TaskRunner:
         print(f"-> Saved {result.rowcount} new rows to '{table_name}'.")
 
     def _save_offices_to_db(self, connection, df_offices, jst_now):
-        # ... (元のsave_offices_to_dbのロジック)
         if df_offices.empty: return
         df_to_save = df_offices.copy(); df_to_save.rename(columns={'都道府県': 'prefecture', '営業所数': 'office_count'}, inplace=True); df_to_save['updated_at'] = jst_now
         records = df_to_save.to_dict(orient='records')
@@ -540,9 +500,8 @@ class TaskRunner:
         print(f"-> Upserted {result.rowcount} rows in 'tamahome_offices'.")
 
     def _analyze_differences(self, df_latest, df_previous, today):
-        # ... (元のanalyze_and_save_daily_report内の比較ロジック)
-        df_latest['composite_key'] = df_latest['prefecture'] + '_' + df_latest['property_name'] + '_' + df_latest['url']
-        df_previous['composite_key'] = df_previous['prefecture'] + '_' + df_previous['property_name'] + '_' + df_previous['url']
+        df_latest['composite_key'] = df_latest['prefecture'].astype(str) + '_' + df_latest['property_name'].astype(str) + '_' + df_latest['url'].astype(str)
+        df_previous['composite_key'] = df_previous['prefecture'].astype(str) + '_' + df_previous['property_name'].astype(str) + '_' + df_previous['url'].astype(str)
         merged_df = pd.merge(df_previous, df_latest, on='composite_key', how='outer', suffixes=('_prev', '_latest'), indicator=True)
         reports_to_save = []
         new_properties = merged_df[merged_df['_merge'] == 'right_only']
@@ -562,7 +521,6 @@ class TaskRunner:
         return reports_to_save
         
     def _load_data_for_visualization(self, connection):
-        # ... (元のvisualizeスクリプトのload_data_from_dbのロジック)
         latest_date_query = text("SELECT MAX(scrape_date) FROM tamahome_properties_detailed;")
         latest_date = connection.execute(latest_date_query).scalar()
         if not latest_date: return None, None, None, None, None
@@ -577,7 +535,6 @@ class TaskRunner:
         return df_detailed, df_pref, df_monthly, df_offices, latest_date
 
     def _save_figures_to_pdf(self, figures, output_dir, latest_date):
-        # ... (元のvisualizeスクリプトのPDF保存ロジック)
         pdf_filename = f"analysis_summary_{latest_date.strftime('%Y%m%d')}.pdf"
         pdf_path = os.path.join(output_dir, pdf_filename)
         images_for_pdf = []
@@ -585,8 +542,8 @@ class TaskRunner:
             buf = BytesIO()
             fig.savefig(buf, format='png', bbox_inches='tight')
             buf.seek(0)
-            images_for_pdf.append(Visualizer._import_libs() or PILImage.open(buf))
-            plt.close(fig)
+            images_for_pdf.append(PILImage.open(buf))
+            plt.close(fig) # メモリを解放
         if images_for_pdf:
             try:
                 images_for_pdf[0].save(pdf_path, save_all=True, append_images=images_for_pdf[1:])
