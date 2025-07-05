@@ -1,4 +1,4 @@
-# .github/workflows/scheduled-run.yml
+# .github/workflows/scheduled-scraper.yml
 
 name: TamaHome Daily Job
 
