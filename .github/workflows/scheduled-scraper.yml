@@ -1,50 +1,89 @@
+# .github/workflows/scheduled-scraper.yml
+
 name: Scheduled TamaHome Scraper
 
 on:
+  # 1. cronスケジュール実行
+  # 毎日 UTC 22:00 (日本時間 午前7:00) に実行
+  # ※GitHub Actionsのcronは遅延することがあるため、正確な時刻保証はありません
   schedule:
-    # UTCで毎日午前0時30分に実行 (日本時間だと午前9時30分)
-    - cron: '30 0 * * *'
+    - cron: '0 22 * * *'
+
+  # 2. 手動実行
+  # GitHubリポジトリのActionsタブから手動でワークフローをトリガー可能
   workflow_dispatch:
+    inputs:
+      force_update:
+        description: 'Force update office data (true/false)'
+        required: false
+        default: 'false'
+      setup_db_only:
+        description: 'Only run DB setup and exit (true/false)'
+        required: false
+        default: 'false'
 
 jobs:
-  scrape-and-compare-data:
-    runs-on: ubuntu-latest
+  scrape-and-save:
+    runs-on: ubuntu-latest # 実行環境として最新のUbuntuを使用
+
+    # 環境変数を設定
+    # ${{ secrets.DATABASE_URL }} は、GitHubリポジトリのシークレットから読み込まれる
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PYTHONUNBUFFERED: "1" # Pythonの出力をバッファリングせず、リアルタイムでログに表示
 
     steps:
-      - name: リポジトリをチェックアウト
+      # --------------------------------------------------
+      # ステップ1: リポジトリのコードをチェックアウト
+      # --------------------------------------------------
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 前回のデータをダウンロード (比較用)
-        uses: actions/download-artifact@v4
-        with:
-          name: tamahome-data-and-reports # 前回のupload-artifactで指定したartifactの名前
-          path: ./TamaHome_CSV_Data/    # ダウンロード先のパス (スクリプトが期待するパス)
-
-      - name: Python環境をセットアップ
+      # --------------------------------------------------
+      # ステップ2: Python環境のセットアップ
+      # --------------------------------------------------
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9' # Python 3.9以上を推奨 (ZoneInfoなどのため)
+          python-version: '3.10' # 使用するPythonのバージョンを指定
 
-      - name: 依存関係をインストール
+      # --------------------------------------------------
+      # ステップ3: 依存関係のキャッシュとインストール
+      # --------------------------------------------------
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip # pipのキャッシュディレクトリ
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 物件スクレイピングスクリプトを実行 (your_script.py)
-        run: python your_script.py
+      # --------------------------------------------------
+      # ステップ4: DBテーブルのセットアップ (必要な場合)
+      # --------------------------------------------------
+      - name: Setup database tables if needed
+        # 手動実行で setup_db_only=true が指定された場合、または
+        # 特定のコミットメッセージが含まれる場合に実行するなどのカスタマイズも可能
+        if: github.event.inputs.setup_db_only == 'true'
+        run: python scrape_tamahome.py --setup-db
 
-      - name: 物件比較分析スクリプトを実行 (compare_and_report.py)
-        run: python compare_and_report.py
-
-      - name: 営業所スクレイピングスクリプトを実行 (scrape_offices.py)
-        run: python scrape_offices.py
-
-      - name: 分析グラフ生成スクリプトを実行 (analyze_and_graph.py) # 新しいステップを追加
-        run: python analyze_and_graph.py
-
-      - name: 生成された全ファイル（CSV, TXT, PNG, PDF）をアーティファクトとして保存
-        uses: actions/upload-artifact@v4
-        with:
-          name: tamahome-data-and-reports # ここを固定名にする
-          path: ./TamaHome_CSV_Data/
-          retention-days: 7
+      # --------------------------------------------------
+      # ステップ5: スクレイピングの実行
+      # --------------------------------------------------
+      - name: Run scraper
+        # setup_db_only=true の場合はこのステップをスキップ
+        if: github.event.inputs.setup_db_only != 'true'
+        run: |
+          # 手動実行で --force-update が指定されたかを判定
+          if [ "${{ github.event.inputs.force_update }}" = "true" ]; then
+            echo "Running with --force-update"
+            python scrape_tamahome.py --force-update
+          else
+            echo "Running in normal mode"
+            python scrape_tamahome.py
+          fi
