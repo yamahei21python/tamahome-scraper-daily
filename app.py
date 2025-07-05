@@ -11,7 +11,7 @@ from PIL import Image
 GITHUB_API_URL = "https://api.github.com"
 REPO_OWNER = "yamahei21python" 
 REPO_NAME = "tamahome-scraper-daily"
-WORKFLOW_FILENAME = "scheduled-run.yml"
+WORKFLOW_FILENAME = "scheduled-scraper.yml"
 ARTIFACT_NAME = "daily-analysis-report" 
 
 try:
