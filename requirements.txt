@@ -10,4 +10,4 @@ seaborn
 Pillow
 japanize-matplotlib
 ipython # Colab/Jupyter環境での表示用
-streamlit>=1.30.0
+streamlit==1.36.0
