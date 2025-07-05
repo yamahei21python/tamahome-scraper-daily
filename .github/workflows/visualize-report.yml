@@ -30,7 +30,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          # 修正点1: バージョン番号を正しい形式 '3.10' に修正
+          python-version: '3.10' 
 
       - name: Cache and Install dependencies
         uses: actions/cache@v4
@@ -42,21 +43,18 @@ jobs:
       
       - name: Install Python & System Dependencies
         run: |
-          # Pythonライブラリのインストール
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          
-          # グラフ描画に必要なシステムライブラリのインストール
-          # ubuntu-latest (24.04)では libgl1 を指定する
           sudo apt-get update && sudo apt-get install -y libgl1
 
       - name: Generate PDF Report
-        # スクリプトを実行。PDFは 'output' ディレクトリに保存される
-        run: python visualize_report.py --output-dir ./output 
+        # 修正点2: スクリプトのパスを絶対パスで指定して、ファイルが見つからないエラーを確実に防ぐ
+        run: python ${{ github.workspace }}/visualize_report.py --output-dir ${{ github.workspace }}/output 
       
       - name: Upload PDF as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: daily-analysis-report # アーティファクト名
-          path: ./output/*.pdf # 'output' ディレクトリ内の全PDFをアップロード
+          # 修正点3: アップロードするパスも絶対パスで指定
+          path: ${{ github.workspace }}/output/*.pdf
           if-no-files-found: error # ファイルが見つからない場合はエラーにする
