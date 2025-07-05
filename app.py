@@ -10,10 +10,11 @@ from datetime import datetime
 GITHUB_API_URL = "https://api.github.com"
 REPO_OWNER = "yamahei21python" # あなたのGitHubユーザー名
 REPO_NAME = "tamahome-scraper-daily" # あなたのリポジトリ名
+
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# ★★★ ここを修正: ワークフローIDではなく、ファイル名として定義 ★★★
+# ★★★ ここを修正: 正しいワークフローファイル名に変更 ★★★
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-WORKFLOW_FILENAME = "scheduled-run.yml" # レポートを生成するワークフローファイル名
+WORKFLOW_FILENAME = "scheduled-scraper.yml" # 実際のファイル名に合わせる
 ARTIFACT_NAME = "daily-analysis-report" # アップロードされるアーティファクト名
 
 # GitHub Personal Access Token (PAT) をStreamlitのシークレットから取得
@@ -52,9 +53,6 @@ def get_workflow_id_by_filename(filename: str) -> int:
 @st.cache_data(ttl=3600) # 1時間結果をキャッシュ
 def get_workflow_runs(workflow_id: int):
     """ワークフローの実行履歴を取得する"""
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★★★ ここを修正: URLのパスをワークフローIDを使うように変更 ★★★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     url = f"{GITHUB_API_URL}/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/{workflow_id}/runs"
     params = {"status": "success", "per_page": 30} # 成功した実行を30件まで取得
     response = requests.get(url, headers=HEADERS, params=params)
