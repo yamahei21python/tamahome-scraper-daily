@@ -11,7 +11,11 @@ from PIL import Image
 GITHUB_API_URL = "https://api.github.com"
 REPO_OWNER = "yamahei21python" 
 REPO_NAME = "tamahome-scraper-daily"
-WORKFLOW_FILENAME = "scheduled-scraper.yml"
+
+# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+# ★★★ ここを修正: 実際に使用しているファイル名に合わせる ★★★
+# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+WORKFLOW_FILENAME = "scheduled-scraper.yml" 
 ARTIFACT_NAME = "daily-analysis-report" 
 
 try:
@@ -30,39 +34,48 @@ st.title("📊 タマホーム 日次分析レポートビューア")
 st.markdown(f"リポジトリ: [{REPO_OWNER}/{REPO_NAME}](https://github.com/{REPO_OWNER}/{REPO_NAME})")
 
 # --- 関数定義 ---
-# ... (get_workflow_id_by_filename, get_workflow_runs, get_artifacts_for_run は変更なし) ...
 @st.cache_data(ttl=86400)
-def get_workflow_id_by_filename(filename: str):
-    # ...
-    pass
+def get_workflow_id_by_filename(filename: str) -> int:
+    """ワークフローのファイル名からワークフローIDを取得する"""
+    url = f"{GITHUB_API_URL}/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    workflows = response.json()["workflows"]
+    for wf in workflows:
+        if wf["path"].endswith(filename):
+            return wf["id"]
+    raise ValueError(f"Workflow with filename '{filename}' not found.")
 
 @st.cache_data(ttl=3600)
 def get_workflow_runs(workflow_id: int):
-    # ...
-    pass
+    """ワークフローの実行履歴を取得する"""
+    url = f"{GITHUB_API_URL}/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/{workflow_id}/runs"
+    params = {"status": "success", "per_page": 30}
+    response = requests.get(url, headers=HEADERS, params=params)
+    response.raise_for_status()
+    return response.json()["workflow_runs"]
 
 @st.cache_data(ttl=3600)
 def get_artifacts_for_run(run_id):
-    # ...
-    pass
+    """特定の実行IDに紐づくアーティファクトの情報を取得する"""
+    url = f"{GITHUB_API_URL}/repos/{REPO_OWNER}/{REPO_NAME}/actions/runs/{run_id}/artifacts"
+    response = requests.get(url, headers=HEADERS)
+    response.raise_for_status()
+    return response.json()["artifacts"]
 
 @st.cache_data(ttl=86400)
 def download_and_extract_images(artifact_url):
     """アーティファクトをダウンロードし、画像とテキストを抽出する"""
     response = requests.get(artifact_url, headers=HEADERS, stream=True)
     response.raise_for_status()
-
     images = {}
     analysis_text = ""
     with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-        # zipファイル内のファイルをループ
-        for filename in sorted(z.namelist()): # ファイル名でソートして順番を担保
+        for filename in sorted(z.namelist()):
             if filename.lower().endswith(".png"):
-                # 画像ファイルの場合
                 img_bytes = z.read(filename)
                 images[filename] = Image.open(io.BytesIO(img_bytes))
             elif filename.lower().endswith(".txt"):
-                # テキストファイルの場合
                 analysis_text = z.read(filename).decode('utf-8')
     return images, analysis_text
 
@@ -101,7 +114,6 @@ else:
                     selected_artifact_url = df_runs[df_runs["display_name"] == selected_run_display_name].iloc[0]["artifact_url"]
                     
                     with st.spinner("レポートをダウンロード中..."):
-                        # ★★★★★★★★★★ ここからが修正箇所 ★★★★★★★★★★
                         images, analysis_text = download_and_extract_images(selected_artifact_url)
                     
                     if images:
