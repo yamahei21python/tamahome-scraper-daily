@@ -5,7 +5,7 @@ name: Generate Daily Analysis Report
 on:
   # データ取得ワークフロー(scheduled-scraper.yml)の成功後に実行
   workflow_run:
-    workflows: ["Scheduled TamaHome Scraper"] # ここはデータ取得ワークフローの名前に合わせる
+    workflows: ["Scheduled TamaHome Scraper"] # データ取得ワークフローの名前に合わせる
     types:
       - completed
   
@@ -14,7 +14,7 @@ on:
 
 jobs:
   build-and-upload-pdf:
-    # データ取得ワークフローが成功した場合にのみ、このジョブを実行
+    # データ取得ワークフローが成功した場合、または手動実行の場合にのみ、このジョブを実行
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     
     runs-on: ubuntu-latest
@@ -39,10 +39,16 @@ jobs:
           key: ${{ runner.os }}-pip-visualize-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-visualize-
-      - run: |
+      
+      - name: Install Python & System Dependencies
+        run: |
+          # Pythonライブラリのインストール
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # フォント関連で必要になる可能性のあるライブラリ
-          sudo apt-get update && sudo apt-get install -y libgl1-mesa-glx
+          
+          # グラフ描画に必要なシステムライブラリのインストール
+          # ubuntu-latest (24.04)では libgl1 を指定する
+          sudo apt-get update && sudo apt-get install -y libgl1
 
       - name: Generate PDF Report
         # スクリプトを実行。PDFは 'output' ディレクトリに保存される
