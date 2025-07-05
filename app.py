@@ -118,8 +118,19 @@ else:
                     
                     if images:
                         st.header("分析グラフ")
+                        
+                        # ★★★★★★★★★★ ここからが修正箇所 ★★★★★★★★★★
                         for filename, img in images.items():
-                            st.image(img, caption=filename, use_column_width=True)
+                            # ファイル名で判定して表示方法を切り替える
+                            if filename.startswith("01_attribute_pie"):
+                                # 円グラフの場合：3列レイアウトで中央揃え＆サイズ調整
+                                col1, col2, col3 = st.columns([1, 2, 1]) # 真ん中の列を広く取る
+                                with col2:
+                                    st.image(img, caption=filename, use_column_width=True) # 列の幅に合わせて表示
+                            else:
+                                # その他のグラフの場合：通常通り全幅で表示
+                                st.image(img, caption=filename, use_column_width=True)
+                        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
                         
                         if analysis_text:
                             st.header("バブルチャート分析結果")
