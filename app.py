@@ -11,10 +11,6 @@ from PIL import Image
 GITHUB_API_URL = "https://api.github.com"
 REPO_OWNER = "yamahei21python" 
 REPO_NAME = "tamahome-scraper-daily"
-
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-# ★★★ ここを修正: 実際に使用しているファイル名に合わせる ★★★
-# ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 WORKFLOW_FILENAME = "scheduled-scraper.yml" 
 ARTIFACT_NAME = "daily-analysis-report" 
 
@@ -33,6 +29,7 @@ st.set_page_config(page_title="タマホーム分析レポート", layout="wide"
 st.title("📊 タマホーム 日次分析レポートビューア")
 
 # --- 関数定義 ---
+# (get_workflow_id_by_filename, get_workflow_runs, get_artifacts_for_run, download_and_extract_images は変更なし)
 @st.cache_data(ttl=86400)
 def get_workflow_id_by_filename(filename: str) -> int:
     """ワークフローのファイル名からワークフローIDを取得する"""
@@ -49,7 +46,7 @@ def get_workflow_id_by_filename(filename: str) -> int:
 def get_workflow_runs(workflow_id: int):
     """ワークフローの実行履歴を取得する"""
     url = f"{GITHUB_API_URL}/repos/{REPO_OWNER}/{REPO_NAME}/actions/workflows/{workflow_id}/runs"
-    params = {"status": "success", "per_page": 30}
+    params = {"status": "success", "per_page": 50} # 少し多めに取得
     response = requests.get(url, headers=HEADERS, params=params)
     response.raise_for_status()
     return response.json()["workflow_runs"]
@@ -89,16 +86,26 @@ else:
         if not runs:
             st.warning("成功したワークフローの実行が見つかりませんでした。")
         else:
-            run_data = []
+            # ★★★★★★★★★★ ここからが修正箇所 ★★★★★★★★★★
+            processed_runs = {} # 日付ごとの最新実行を保持する辞書
             for run in runs:
                 run_artifacts = get_artifacts_for_run(run["id"])
                 for artifact in run_artifacts:
                     if artifact["name"] == ARTIFACT_NAME and not artifact["expired"]:
-                        run_data.append({
-                            "display_name": f"{datetime.fromisoformat(run['created_at'].replace('Z', '+00:00')).strftime('%Y年%m月%d日 %H:%M')} (ID: {run['id']})",
-                            "artifact_url": artifact["archive_download_url"]
-                        })
+                        # 実行日時をJSTに変換し、日付部分のみを取得
+                        run_date = datetime.fromisoformat(run['created_at'].replace('Z', '+00:00')).strftime('%Y年%m月%d日')
+                        
+                        # 同じ日付の実行がまだ登録されていないか、より新しい実行であれば上書き
+                        if run_date not in processed_runs:
+                            processed_runs[run_date] = {
+                                "display_name": run_date,
+                                "artifact_url": artifact["archive_download_url"]
+                            }
+                        # 一致するアーティファクトを見つけたらループを抜ける
                         break 
+            
+            run_data = list(processed_runs.values())
+            # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             
             if not run_data:
                 st.warning(f"'{ARTIFACT_NAME}' という名前のアーティファクトが見つかりませんでした。")
@@ -118,18 +125,13 @@ else:
                     if images:
                         st.header("分析グラフ")
                         
-                        # ★★★★★★★★★★ ここからが修正箇所 ★★★★★★★★★★
                         for filename, img in images.items():
-                            # ファイル名で判定して表示方法を切り替える
                             if filename.startswith("01_attribute_pie"):
-                                # 円グラフの場合：3列レイアウトで中央揃え＆サイズ調整
-                                col1, col2, col3 = st.columns([1, 2, 1]) # 真ん中の列を広く取る
+                                col1, col2, col3 = st.columns([1, 2, 1]) 
                                 with col2:
-                                    st.image(img, caption=filename, use_column_width=True) # 列の幅に合わせて表示
+                                    st.image(img, caption=filename, use_column_width=True)
                             else:
-                                # その他のグラフの場合：通常通り全幅で表示
                                 st.image(img, caption=filename, use_column_width=True)
-                        # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
                         
                         if analysis_text:
                             st.header("バブルチャート分析結果")
