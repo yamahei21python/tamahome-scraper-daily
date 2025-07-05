@@ -6,6 +6,10 @@ import io
 import pandas as pd
 from datetime import datetime
 
+# ★★★★★ デバッグ用コードを追加 ★★★★★
+st.write(f"Streamlit version: {st.__version__}")
+# ★★★★★★★★★★★★★★★★★★★★★
+
 # --- 定数設定 ---
 GITHUB_API_URL = "https://api.github.com"
 REPO_OWNER = "yamahei21python" # あなたのGitHubユーザー名
