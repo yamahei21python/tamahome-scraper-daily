@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-【完全統合版 / エラー修正済】タマホーム物件情報 自動処理スクリプト
+【完全統合版 / 画像・PDF両対応】タマホーム物件情報 自動処理スクリプト
 
-データ取得、比較分析、PDFレポート生成を一つのスクリプトで実行します。
+データ取得、比較分析、グラフ画像生成、PDFレポート生成を一つのスクリプトで実行します。
 コマンドライン引数により、実行するタスクを選択可能です。
 """
 
@@ -16,7 +16,6 @@ import time
 import argparse
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
-from io import BytesIO
 
 # --- 主要ライブラリ ---
 import requests
@@ -410,20 +409,27 @@ class TaskRunner:
             print("\n" + "="*80 + "\n--- Part 1: Office Information ---")
             office_count_in_db = connection.execute(text("SELECT COUNT(*) FROM tamahome_offices")).scalar()
             if force_update or jst_now.day == 1 or office_count_in_db == 0:
+                if force_update: print("Forced update requested. Updating office data.")
+                elif jst_now.day == 1: print("It's the 1st of the month. Updating office data.")
+                else: print("Office data not found in DB. Fetching new data.")
                 df_offices = Scraper.scrape_tamahome_offices()
                 if df_offices is not None and not df_offices.empty: self._save_offices_to_db(connection, df_offices, jst_now)
             else:
                 print("Skipping office data update.")
+            
             print("\n" + "="*80 + "\n--- Part 2: Property Information ---")
             raw_property_df = Scraper.scrape_all_properties_details()
             if raw_property_df is None or raw_property_df.empty:
                 print("\nCould not retrieve property data. Terminating property scraping.")
                 return
+            
             detailed_df, pref_summary_df, month_summary_df = Scraper.create_and_process_dataframes(raw_property_df, jst_now)
+            
             print("\n--- Saving data to database ---")
             self._save_data_to_db(connection, detailed_df, 'tamahome_properties_detailed', jst_now, ['scrape_date', 'url'])
             self._save_data_to_db(connection, pref_summary_df, 'tamahome_summary_prefecture', jst_now, ['scrape_date', 'prefecture', 'attribute'])
             self._save_data_to_db(connection, month_summary_df, 'tamahome_summary_monthly', jst_now, ['scrape_date', 'completion_period', 'attribute'])
+            
             connection.commit()
 
     def run_analysis_tasks(self, jst_now):
@@ -447,33 +453,58 @@ class TaskRunner:
                 connection.commit()
 
     def run_visualization_tasks(self, output_dir):
-        # ★★★ 修正箇所: ディレクトリ作成をここに追加 ★★★
         os.makedirs(output_dir, exist_ok=True)
         print(f"Output directory '{output_dir}' is ready.")
-        
         with self.engine.connect() as connection:
-            print("\n" + "="*80 + "\n--- Part 4: PDF Report Visualization ---")
+            print("\n" + "="*80 + "\n--- Part 4: Graph & PDF Report Generation ---")
             df_detailed, df_pref, df_monthly, df_offices, latest_date = self._load_data_for_visualization(connection)
             if df_detailed is None:
                 print("Could not load data for visualization. Aborting.")
                 return
 
-            figures = []
-            figures.append(Visualizer.analyze_attribute_by_month(df_detailed))
-            figures.append(Visualizer.analyze_combined_prefecture_view_detailed(df_detailed, df_pref, df_offices))
-            figures.append(Visualizer.analyze_combined_5_and_6(df_detailed, df_monthly))
-            fig_bubble, bubble_text = Visualizer.analyze_bubble_chart(df_detailed, df_pref, df_offices)
-            if fig_bubble: figures.append(fig_bubble)
+            figures_with_names = []
+            date_str = latest_date.strftime('%Y%m%d')
+
+            fig1 = Visualizer.analyze_attribute_by_month(df_detailed)
+            if fig1: figures_with_names.append((fig1, f"01_attribute_pie_{date_str}.png"))
+
+            fig2 = Visualizer.analyze_combined_prefecture_view_detailed(df_detailed, df_pref, df_offices)
+            if fig2: figures_with_names.append((fig2, f"02_prefecture_view_{date_str}.png"))
             
-            figures = [fig for fig in figures if fig is not None]
-            if not figures:
+            fig3 = Visualizer.analyze_combined_5_and_6(df_detailed, df_monthly)
+            if fig3: figures_with_names.append((fig3, f"03_monthly_combined_{date_str}.png"))
+
+            fig4, bubble_text = Visualizer.analyze_bubble_chart(df_detailed, df_pref, df_offices)
+            if fig4: figures_with_names.append((fig4, f"04_bubble_chart_{date_str}.png"))
+
+            if not figures_with_names:
                 print("No graphs were generated.")
                 return
 
-            self._save_figures_to_pdf(figures, output_dir, latest_date)
+            print("\n--- Saving graphs as individual image files ---")
+            saved_image_paths = []
+            for fig, filename in figures_with_names:
+                path = os.path.join(output_dir, filename)
+                try:
+                    fig.savefig(path, bbox_inches='tight')
+                    print(f"-> ✅ Saved '{path}'")
+                    saved_image_paths.append(path)
+                except Exception as e:
+                    print(f"-> ❌ Failed to save '{path}': {e}")
+                finally:
+                    plt.close(fig)
+            
+            if saved_image_paths:
+                self._save_images_to_pdf(saved_image_paths, output_dir, latest_date)
+            
             if bubble_text:
-                print("\n--- Bubble Chart Analysis ---")
-                print(bubble_text)
+                text_path = os.path.join(output_dir, f"05_bubble_analysis_{date_str}.txt")
+                try:
+                    with open(text_path, 'w', encoding='utf-8') as f:
+                        f.write(bubble_text)
+                    print(f"-> ✅ Saved '{text_path}'")
+                except Exception as e:
+                    print(f"-> ❌ Failed to save '{text_path}': {e}")
 
     def _save_data_to_db(self, connection, df, table_name, jst_now, unique_keys):
         if df.empty: return
@@ -533,22 +564,29 @@ class TaskRunner:
         if not df_offices.empty: df_offices['都道府県'] = df_offices['都道府県'].apply(lambda x: x+'都' if x=='東京' else (x+'府' if x in ['大阪','京都'] else (x+'県' if not x.endswith(('都','道','府','県')) else x)))
         return df_detailed, df_pref, df_monthly, df_offices, latest_date
 
-    def _save_figures_to_pdf(self, figures, output_dir, latest_date):
+    def _save_images_to_pdf(self, image_paths, output_dir, latest_date):
+        print("\n--- Compiling images into a single PDF file ---")
         pdf_filename = f"analysis_summary_{latest_date.strftime('%Y%m%d')}.pdf"
         pdf_path = os.path.join(output_dir, pdf_filename)
+        
         images_for_pdf = []
-        for fig in figures:
-            buf = BytesIO()
-            fig.savefig(buf, format='png', bbox_inches='tight')
-            buf.seek(0)
-            images_for_pdf.append(PILImage.open(buf))
-            plt.close(fig) # メモリを解放
+        for path in image_paths:
+            try:
+                img = PILImage.open(path).convert("RGB")
+                images_for_pdf.append(img)
+            except Exception as e:
+                print(f"Warning: Could not open image {path} for PDF conversion: {e}")
+
         if images_for_pdf:
             try:
-                images_for_pdf[0].save(pdf_path, save_all=True, append_images=images_for_pdf[1:])
+                images_for_pdf[0].save(
+                    pdf_path, 
+                    save_all=True, 
+                    append_images=images_for_pdf[1:]
+                )
                 print(f"-> ✅ PDF report saved to '{pdf_path}'.")
             except Exception as e:
-                print(f"❌ Error creating PDF: {e}")
+                print(f"-> ❌ Error creating PDF: {e}")
 
 # ==============================================================================
 # 7. メイン実行ブロック
