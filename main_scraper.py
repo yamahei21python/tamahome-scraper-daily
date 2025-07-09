@@ -447,7 +447,7 @@ class TaskRunner:
             reports_to_save = self._analyze_differences(df_latest, df_previous, today)
             if reports_to_save:
                 connection.execute(text("DELETE FROM tamahome_daily_reports WHERE report_date = :today"), {'today': today})
-                stmt = text("INSERT INTO tamahome_daily_reports (report_date, report_type, content) VALUES (:report_date, :report_type, :content::jsonb)")
+                stmt = text("INSERT INTO tamahome_daily_reports (report_date, report_type, content) VALUES (:report_date, :report_type, :content)")
                 db_result = connection.execute(stmt, reports_to_save)
                 print(f"-> Saved {db_result.rowcount} report entries to the database.")
                 connection.commit()
