@@ -407,12 +407,25 @@ class TaskRunner:
     def setup_database_tables(self):
         with self.engine.connect() as connection:
             print("\n--- [Setup Mode] Checking and creating tables if they don't exist ---")
+            # [MODIFIED] tamahome_daily_reports テーブルのスキーマを変更
             connection.execute(text("""
                 CREATE TABLE IF NOT EXISTS tamahome_offices ( prefecture VARCHAR(10) PRIMARY KEY, office_count INTEGER NOT NULL, updated_at TIMESTAMPTZ NOT NULL );
                 CREATE TABLE IF NOT EXISTS tamahome_properties_detailed ( id SERIAL PRIMARY KEY, scrape_date DATE NOT NULL, url TEXT NOT NULL, prefecture VARCHAR(10), property_name TEXT, attribute VARCHAR(10), completion_period VARCHAR(10), total_units INTEGER, units_for_sale INTEGER, price_avg BIGINT, price_range TEXT, UNIQUE (scrape_date, url) );
                 CREATE TABLE IF NOT EXISTS tamahome_summary_prefecture ( id SERIAL PRIMARY KEY, scrape_date DATE NOT NULL, prefecture VARCHAR(10) NOT NULL, attribute VARCHAR(10) NOT NULL, total_units INTEGER, units_for_sale INTEGER, unsold_rate REAL, price_avg BIGINT, UNIQUE (scrape_date, prefecture, attribute) );
                 CREATE TABLE IF NOT EXISTS tamahome_summary_monthly ( id SERIAL PRIMARY KEY, scrape_date DATE NOT NULL, completion_period VARCHAR(10) NOT NULL, attribute VARCHAR(10) NOT NULL, total_units INTEGER, units_for_sale INTEGER, unsold_rate REAL, price_avg BIGINT, UNIQUE (scrape_date, completion_period, attribute) );
-                CREATE TABLE IF NOT EXISTS tamahome_daily_reports ( id SERIAL PRIMARY KEY, report_date DATE NOT NULL, report_type VARCHAR(20) NOT NULL, content JSONB NOT NULL );
+                CREATE TABLE IF NOT EXISTS tamahome_daily_reports ( 
+                    id SERIAL PRIMARY KEY, 
+                    report_date DATE NOT NULL, 
+                    report_type VARCHAR(20) NOT NULL,
+                    url TEXT NOT NULL,
+                    prefecture VARCHAR(10),
+                    property_name TEXT,
+                    attribute VARCHAR(10),
+                    price_range TEXT,
+                    units_for_sale INTEGER,
+                    changes JSONB,
+                    UNIQUE (report_date, url, report_type)
+                );
                 CREATE INDEX IF NOT EXISTS idx_report_date ON tamahome_daily_reports (report_date);
             """))
             connection.commit()
@@ -461,7 +474,16 @@ class TaskRunner:
             reports_to_save = self._analyze_differences(df_latest, df_previous, today)
             if reports_to_save:
                 connection.execute(text("DELETE FROM tamahome_daily_reports WHERE report_date = :today"), {'today': today})
-                stmt = text("INSERT INTO tamahome_daily_reports (report_date, report_type, content) VALUES (:report_date, :report_type, :content)")
+                # [MODIFIED] INSERT文を新しいテーブルスキーマに合わせて変更
+                stmt = text("""
+                    INSERT INTO tamahome_daily_reports (
+                        report_date, report_type, url, prefecture, property_name, 
+                        attribute, price_range, units_for_sale, changes
+                    ) VALUES (
+                        :report_date, :report_type, :url, :prefecture, :property_name, 
+                        :attribute, :price_range, :units_for_sale, :changes
+                    )
+                """)
                 db_result = connection.execute(stmt, reports_to_save)
                 print(f"-> Saved {db_result.rowcount} report entries to the database.")
                 connection.commit()
@@ -547,11 +569,40 @@ class TaskRunner:
         df_latest['composite_key'] = df_latest['prefecture'].astype(str) + '_' + df_latest['property_name'].astype(str) + '_' + df_latest['url'].astype(str)
         df_previous['composite_key'] = df_previous['prefecture'].astype(str) + '_' + df_previous['property_name'].astype(str) + '_' + df_previous['url'].astype(str)
         merged_df = pd.merge(df_previous, df_latest, on='composite_key', how='outer', suffixes=('_prev', '_latest'), indicator=True)
+        
         reports_to_save = []
+        
+        # 新規物件
         new_properties = merged_df[merged_df['_merge'] == 'right_only']
-        for _, row in new_properties.iterrows(): reports_to_save.append({'report_date': today, 'report_type': 'new', 'content': json.dumps({'prefecture': row['prefecture_latest'], 'property_name': row['property_name_latest'], 'url': row['url_latest'], 'attribute': row['attribute_latest'], 'price_range': row['price_range_latest'], 'units_for_sale': int(row['units_for_sale_latest']) if pd.notna(row['units_for_sale_latest']) else 0}, ensure_ascii=False)})
+        for _, row in new_properties.iterrows():
+            reports_to_save.append({
+                'report_date': today,
+                'report_type': 'new',
+                'url': row['url_latest'],
+                'prefecture': row['prefecture_latest'],
+                'property_name': row['property_name_latest'],
+                'attribute': row['attribute_latest'],
+                'price_range': row['price_range_latest'],
+                'units_for_sale': int(row['units_for_sale_latest']) if pd.notna(row['units_for_sale_latest']) else None,
+                'changes': None
+            })
+
+        # 削除物件
         removed_properties = merged_df[merged_df['_merge'] == 'left_only']
-        for _, row in removed_properties.iterrows(): reports_to_save.append({'report_date': today, 'report_type': 'removed', 'content': json.dumps({'prefecture': row['prefecture_prev'], 'property_name': row['property_name_prev'], 'url': row['url_prev'], 'attribute': row['attribute_prev'], 'price_range': row['price_range_prev'], 'units_for_sale': int(row['units_for_sale_prev']) if pd.notna(row['units_for_sale_prev']) else 0}, ensure_ascii=False)})
+        for _, row in removed_properties.iterrows():
+            reports_to_save.append({
+                'report_date': today,
+                'report_type': 'removed',
+                'url': row['url_prev'],
+                'prefecture': row['prefecture_prev'],
+                'property_name': row['property_name_prev'],
+                'attribute': row['attribute_prev'],
+                'price_range': row['price_range_prev'],
+                'units_for_sale': int(row['units_for_sale_prev']) if pd.notna(row['units_for_sale_prev']) else None,
+                'changes': None
+            })
+
+        # 更新物件
         both_df = merged_df[merged_df['_merge'] == 'both'].copy()
         compare_cols = ['attribute', 'completion_period', 'total_units', 'units_for_sale', 'price_avg', 'price_range']
         for _, row in both_df.iterrows():
@@ -559,8 +610,22 @@ class TaskRunner:
             for col in compare_cols:
                 val_prev, val_latest = row[f'{col}_prev'], row[f'{col}_latest']
                 if pd.isna(val_prev) and pd.isna(val_latest): continue
-                if str(val_prev) != str(val_latest): updates[col] = {'from': str(val_prev) if pd.notna(val_prev) else None, 'to': str(val_latest) if pd.notna(val_latest) else None}
-            if updates: reports_to_save.append({'report_date': today, 'report_type': 'updated', 'content': json.dumps({'prefecture': row['prefecture_latest'], 'property_name': row['property_name_latest'], 'url': row['url_latest'], 'changes': updates}, ensure_ascii=False)})
+                if str(val_prev) != str(val_latest):
+                    updates[col] = {'from': str(val_prev) if pd.notna(val_prev) else None, 'to': str(val_latest) if pd.notna(val_latest) else None}
+            
+            if updates:
+                reports_to_save.append({
+                    'report_date': today,
+                    'report_type': 'updated',
+                    'url': row['url_latest'],
+                    'prefecture': row['prefecture_latest'],
+                    'property_name': row['property_name_latest'],
+                    'attribute': None,
+                    'price_range': None,
+                    'units_for_sale': None,
+                    'changes': json.dumps(updates, ensure_ascii=False)
+                })
+
         print(f"-> Found {len(new_properties)} new, {len(removed_properties)} removed, {len(reports_to_save) - len(new_properties) - len(removed_properties)} updated properties.")
         return reports_to_save
         
