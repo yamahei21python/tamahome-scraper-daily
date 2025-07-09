@@ -54,8 +54,22 @@ except ImportError:
 PROPERTY_BASE_URL = "https://www.tamahome.jp/kodatebunjyo/"
 OFFICE_BASE_URL = "https://www.tamahome.jp/modelhouse/"
 AREA_PATHS = [
-    "hokkaido/", "tohoku/", "hokuriku/", "kanto/", "tokai/nagano/", "tokai/aichi/",
-    "tokai/gifu/", "tokai/shizuoka/", "tokai/mie/", "kinki/", "chugoku/", "shikoku/", "kyushu/"
+    "hokkaido/", "tohoku/", "hokuriku/", "kanto/",
+    "tokai/nagano/",
+    "tokai/aichi/",
+    "tokai/gifu/",
+    "tokai/shizuoka/",
+    "tokai/mie/",
+    "kinki/", "chugoku/", "shikoku/",
+    # 九州地区を各県に展開
+    "kyushu/fukuoka/",
+    "kyushu/saga/",
+    "kyushu/nagasaki/",
+    "kyushu/kumamoto/",
+    "kyushu/oita/",
+    "kyushu/miyazaki/",
+    "kyushu/kagoshima/",
+    "kyushu/okinawa/",
 ]
 ROMAJI_TO_PREF_MAP = {
     'hokkaido': '北海道', 'aomori': '青森県', 'iwate': '岩手県', 'miyagi': '宮城県', 'akita': '秋田県', 'yamagata': '山形県',
